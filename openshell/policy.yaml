@@ -39,6 +39,20 @@ network_policies:
     binaries:
       - path: /usr/local/bin/opencode
 
+  culture_museum_api:
+    name: Culture.go.kr museum API (read-only)
+    endpoints:
+      - host: apis.data.go.kr
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow:
+              method: GET
+              path: /B553457/rgnCltrFcltExmnv1/clifMsmv1
+    binaries:
+      - path: /usr/local/bin/opencode
+
   local_llm:
     name: Local NVIDIA LLM
 
