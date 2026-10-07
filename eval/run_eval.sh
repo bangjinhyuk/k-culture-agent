@@ -13,6 +13,8 @@
 #             so the runs appear in the UI conversation list as "[eval] <id>". AGENT/WORKDIR are
 #             fixed by the UI backend. Needs the UI server running (./scripts/start_ui.sh).
 #   direct -> call `openshell sandbox exec` yourself (not visible in the UI).
+# MODEL=<provider/model id> (ui mode only; see GET /api/models), e.g. MODEL=local-qwen/qwen/qwen3-next-80b.
+#   Unset -> the UI default. Results go to results/<sandbox>-<model tag>-<timestamp>/.
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -37,16 +39,19 @@ else
   FILES=(); for id in "$@"; do FILES+=(questions/"$id"*.txt); done
 fi
 
-OUT="results/$SANDBOX-$(date +%Y%m%d-%H%M%S)"
+MODEL="${MODEL:-}"
+MODEL_TAG=""; [ -n "$MODEL" ] && MODEL_TAG=$(basename "$MODEL")
+OUT="results/$SANDBOX${MODEL_TAG:+-$MODEL_TAG}-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$OUT"
 AGENT_FLAG=""; [ -n "$AGENT" ] && AGENT_FLAG="--agent $AGENT"
-echo "sandbox=$SANDBOX mode=$MODE agent=${AGENT:-default} workdir=$WORKDIR -> $OUT"
+echo "sandbox=$SANDBOX mode=$MODE model=${MODEL:-default} agent=${AGENT:-default} workdir=$WORKDIR -> $OUT"
 
 {
   echo "# 평가 결과: $SANDBOX"
   echo
   echo "- 시각: $(date '+%Y-%m-%d %H:%M:%S')"
   echo "- 실행 방식: $MODE$([ "$MODE" = ui ] && echo " ($UI_URL)"), 에이전트: ${AGENT:-default}, 작업 디렉터리: $WORKDIR"
+  echo "- 모델: ${MODEL:-UI 기본값}"
   echo "- 판정 기준: QUESTIONS.md"
   echo
 } > "$OUT/summary.md"
@@ -56,7 +61,7 @@ for f in "${FILES[@]}"; do
   id=$(basename "$f" .txt)
   start=$(date +%s)
   if [ "$MODE" = ui ]; then
-    python3 ui_run.py "$UI_URL" "[eval] $id" "$f" "$TIMEOUT" "$OUT/$id.json" "$OUT/$id.err"
+    python3 ui_run.py "$UI_URL" "[eval${MODEL_TAG:+ $MODEL_TAG}] $id" "$f" "$TIMEOUT" "$OUT/$id.json" "$OUT/$id.err" "$MODEL"
   else
     prompt=$(base64 -w0 < "$f")
     # The question is passed base64-encoded so quoting and Korean text survive the remote shell.

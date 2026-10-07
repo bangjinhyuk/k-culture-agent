@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Send one question through the UI backend (/api/run) and save the result.
-   ui_run.py <ui-url> <title> <prompt-file> <timeout-sec> <events.jsonl> <stderr.txt>
+   ui_run.py <ui-url> <title> <prompt-file> <timeout-sec> <events.jsonl> <stderr.txt> [model-id]
 Because the run goes through the UI backend, it shows up in the UI's conversation list.
 Exit code: 0 finished without error, 1 run error, 2 could not start, 124 timeout."""
 import json
@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 
 url, title, prompt_file, timeout, out_json, out_err = sys.argv[1:7]
+model = sys.argv[7] if len(sys.argv) > 7 else ""
 timeout = int(timeout)
 
 
@@ -27,7 +28,7 @@ prompt = open(prompt_file, encoding="utf-8").read().strip()
 deadline = time.time() + timeout
 while True:  # the UI runs one agent at a time; wait while it is busy
     try:
-        status, body = call("POST", "/api/run", {"prompt": prompt, "title": title})
+        status, body = call("POST", "/api/run", {"prompt": prompt, "title": title, **({"model": model} if model else {})})
     except OSError as error:
         open(out_err, "w").write(f"UI server unreachable: {error}\n")
         sys.exit(2)
