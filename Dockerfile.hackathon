@@ -1,0 +1,120 @@
+FROM ubuntu:24.04
+
+# ------------------------------------------------------------
+# Base packages
+# ------------------------------------------------------------
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       bash \
+       curl \
+       ca-certificates \
+       coreutils \
+       findutils \
+       tar \
+       git \
+       ripgrep \
+       nodejs \
+       npm \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# ------------------------------------------------------------
+# Sandbox user
+# ------------------------------------------------------------
+RUN groupadd --gid 10001 sandbox \
+    && useradd \
+       --uid 10001 \
+       --gid 10001 \
+       --create-home \
+       --shell /bin/bash \
+       sandbox
+
+
+# ------------------------------------------------------------
+# OpenCode install
+# ------------------------------------------------------------
+ARG OPENCODE_VERSION=1.18.34
+
+RUN curl -fsSL \
+    "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" \
+    -o /tmp/opencode.tar.gz \
+    && tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin \
+    && chmod 0755 /usr/local/bin/opencode \
+    && rm /tmp/opencode.tar.gz \
+    && /usr/local/bin/opencode --version
+
+
+# ------------------------------------------------------------
+# Workspace
+# ------------------------------------------------------------
+RUN mkdir -p /workspace/app
+
+
+# OpenCode Agent 코드
+COPY app/ /workspace/app/
+
+# OpenCode custom tool dependencies
+# Runtime에서는 /workspace/app이 read-only이므로 build 시 미리 설치
+RUN npm install     --prefix /workspace/app/.opencode     --omit=dev     --no-audit     --no-fund     && test -f /workspace/app/.opencode/node_modules/@opencode-ai/plugin/package.json
+
+
+
+# 해커톤 제공 데이터
+COPY hackathon/ /workspace/hackathon/
+
+
+# Agent가 읽을 수 있는 과제 설명
+COPY TASK.md /workspace/TASK.md
+COPY README.md /workspace/README.md
+
+
+# ------------------------------------------------------------
+# 기본 소유권
+# ------------------------------------------------------------
+RUN chown -R root:root /workspace
+
+
+# ------------------------------------------------------------
+# Filesystem permissions
+# ------------------------------------------------------------
+
+# 입력 데이터 read-only
+RUN chmod -R a=rX /workspace/hackathon/input
+
+
+# restricted / secrets는 이미지 안에는 존재하지만
+# 실제 접근 차단은 OpenShell policy에서 수행
+RUN chmod -R a=rX \
+    /workspace/hackathon/restricted \
+    /workspace/hackathon/secrets
+
+
+# Agent 코드 자체도 read-only
+RUN chmod -R a=rX /workspace/app
+
+
+# output만 sandbox 사용자가 쓰기 가능
+RUN chown -R sandbox:sandbox /workspace/hackathon/output \
+    && chmod -R u+rwX,go+rX /workspace/hackathon/output
+
+
+# ------------------------------------------------------------
+# OpenCode runtime state
+# /workspace/app은 read-only로 유지하고
+# 세션/cache/config 데이터는 /tmp에 저장
+# ------------------------------------------------------------
+ENV HOME=/tmp/opencode-home \
+    XDG_CONFIG_HOME=/tmp/opencode-config \
+    XDG_DATA_HOME=/tmp/opencode-data \
+    XDG_CACHE_HOME=/tmp/opencode-cache \
+    XDG_STATE_HOME=/tmp/opencode-state
+
+
+# ------------------------------------------------------------
+# Runtime
+# ------------------------------------------------------------
+WORKDIR /tmp
+
+USER sandbox
+
+CMD ["/bin/bash"]

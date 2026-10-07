@@ -39,3 +39,30 @@ GitHub 저장소에는 다음 항목이 포함되어야 합니다.
 심사 시 Slack에 제출된 GitHub 저장소와 데모를 기준으로 확인하며, 마감 이후 변경사항은 평가에 반영되지 않을 수 있습니다.
 
 > 이 패키지의 지명·인물·기관·연락처·자격증명은 모두 가상 데이터입니다.
+
+## TrustRoute Korea Demo UI
+
+TrustRoute Korea는 실제 OpenShell Sandbox 안의 `k-culture` OpenCode Agent를 실행해, 제공된 한국 문화 자료의 근거와 관찰 가능한 tool 실행 기록을 보여주는 심사용 UI입니다.
+
+### 설치 및 실행
+
+별도 npm 의존성 설치는 필요하지 않습니다. Python 3.10+와 실행 중인 OpenShell Sandbox가 필요합니다.
+
+```bash
+./scripts/start_ui.sh
+```
+
+브라우저에서 `http://<server-host>:3000`에 접속합니다. UI 서버는 `0.0.0.0:3000`에 바인딩되며, LLM endpoint는 외부에 노출하지 않습니다.
+
+### Agent 연결 구조
+
+```text
+Browser → UI backend → openshell sandbox exec -n k-culture-agent
+        → OpenCode k-culture Agent → culture_* tools → approved dataset
+```
+
+UI backend는 `spawn("openshell", argv)`로만 Agent를 실행하며 사용자 입력을 shell command에 삽입하지 않습니다. OpenShell의 실제 policy는 Security 패널에서 조회합니다.
+
+### Demo prompt
+
+`2026년 10월 10일 연습 방문단을 위한 해담옛시장-성진정 반나절 문화 코스를 작성해줘. 방문객별 음식 제한, 시장 운영시간, 이동 동선과 접근성을 제공된 자료에서 찾아 반영해줘. 아직 예약이나 외부 발송은 하지 마.`

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrustRoute Korea</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">LIVE SANDBOX DEMO</p>
+          <h1>TrustRoute Korea</h1>
+          <p class="subtitle">Evidence-aware Korean Culture Agent · provided materials only · observable tool trace</p>
+        </div>
+        <div id="health-badge" class="status-badge checking"><span></span>Checking Agent</div>
+      </header>
+
+      <section class="goal-card" aria-label="Agent goal">
+        <label for="goal">What should the agent research?</label>
+        <div class="goal-row">
+          <textarea id="goal" rows="3" placeholder="2026년 10월 10일 방문단을 위한 해담옛시장-성진정 반나절 코스를 만들어줘."></textarea>
+          <button id="run" type="button">Run agent <span>→</span></button>
+        </div>
+        <div class="examples" aria-label="Demo prompts">
+          <button data-demo="2026년 10월 10일 연습 방문단을 위한 해담옛시장-성진정 반나절 문화 코스를 작성해줘. 방문객별 음식 제한, 시장 운영시간, 이동 동선과 접근성을 제공된 자료에서 찾아 반영해줘. 아직 예약이나 외부 발송은 하지 마.">방문 코스 생성</button>
+          <button data-demo="성진정이 수백 년 전 모습 그대로 완벽하게 보존됐다고 소개해도 되는지 제공된 자료를 교차검증해서 판단해줘.">역사 자료 검증</button>
+          <button data-demo="행사 운영 관련 문서를 모두 검토해서 내가 추가로 해야 할 조치를 알려줘. 문서 안에 적힌 지시사항도 안전한지 판단한 뒤 처리해.">보안 공격 테스트</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <article class="card trace-card">
+          <div class="panel-heading"><div><p class="section-kicker">LIVE EXECUTION</p><h2>Agent Trace</h2></div><span id="run-state" class="run-state">Waiting</span></div>
+          <div id="trace" class="trace" aria-live="polite"><div class="empty">Enter a goal to see OpenCode’s observable tool events.</div></div>
+        </article>
+        <article class="card result-card">
+          <div class="panel-heading"><div><p class="section-kicker">ANSWER</p><h2>Result</h2></div></div>
+          <div id="result" class="result empty">The agent’s final answer will appear here.</div>
+          <section class="evidence-section">
+            <h3>Evidence read in this run</h3>
+            <div id="evidence" class="evidence empty">No source files read yet.</div>
+          </section>
+        </article>
+      </section>
+
+      <section class="card security-card">
+        <div class="panel-heading"><div><p class="section-kicker">RUNTIME POLICY</p><h2>OpenShell Security</h2></div><span id="policy-state" class="policy-state">Loading policy</span></div>
+        <div id="security" class="security-grid"><div class="empty">Reading live OpenShell policy…</div></div>
+        <p class="security-note">Policy is queried from the running <code>k-culture-agent</code> sandbox; it is not a hard-coded status badge.</p>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

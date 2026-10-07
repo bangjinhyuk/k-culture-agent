@@ -1,0 +1,57 @@
+version: 1
+
+filesystem_policy:
+  include_workdir: false
+
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /proc
+    - /dev/urandom
+    - /etc
+
+    - /workspace/app
+
+    - /workspace/TASK.md
+    - /workspace/README.md
+
+    - /workspace/hackathon/input
+
+  read_write:
+    - /workspace/hackathon/output
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: best_effort
+
+network_policies:
+  npm_registry:
+    name: npm-registry
+    endpoints:
+      - host: registry.npmjs.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+        allow_encoded_slash: true
+    binaries:
+      - path: /usr/local/bin/opencode
+
+  local_llm:
+    name: Local NVIDIA LLM
+
+    endpoints:
+      - host: host.openshell.internal
+        port: 8000
+        protocol: rest
+        enforcement: enforce
+
+        rules:
+          - allow:
+              method: POST
+              path: /v1/chat/completions
+
+    binaries:
+      - path: /usr/local/bin/opencode

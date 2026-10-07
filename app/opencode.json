@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "local-nvidia": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local NVIDIA Nemotron",
+      "options": {
+        "baseURL": "http://host.openshell.internal:8000/v1"
+      },
+      "models": {
+        "nvidia/nemotron-3-super": {
+          "name": "NVIDIA Nemotron 3 Super"
+        }
+      }
+    }
+  }
+}
