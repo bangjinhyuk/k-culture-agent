@@ -15,14 +15,79 @@ const newSessionButton = $("#new-session")
 function escapeHtml(value) {
   return String(value).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char])
 }
+// Markdown renderer for the agent answer. Input is HTML-escaped first, so model output cannot inject markup.
 function inlineMarkdown(value) {
-  return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`(.+?)`/g, "<code>$1</code>")
+  const codes = []
+  const text = escapeHtml(value)
+    .replace(/`([^`]+)`/g, (_, code) => { codes.push(code); return `\u0000${codes.length - 1}\u0000` })
+    .replace(/&lt;br\s*\/?&gt;/gi, "<br>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*(?!\s)([^*]+?)(?<!\s)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+  return text.replace(/\u0000(\d+)\u0000/g, (_, index) => `<code>${codes[index]}</code>`)
 }
+function renderList(items) {
+  let html = ""
+  const stack = []
+  for (const item of items) {
+    const tag = item.ordered ? "ol" : "ul"
+    while (stack.length && item.indent < stack[stack.length - 1].indent) html += `</li></${stack.pop().tag}>`
+    const top = stack[stack.length - 1]
+    if (top && top.indent === item.indent) {
+      html += "</li>"
+      if (top.tag !== tag) { html += `</${stack.pop().tag}><${tag}>`; stack.push({ indent: item.indent, tag }) }
+    } else {
+      html += `<${tag}>`; stack.push({ indent: item.indent, tag })
+    }
+    html += `<li>${inlineMarkdown(item.text)}`
+  }
+  while (stack.length) html += `</li></${stack.pop().tag}>`
+  return html
+}
+const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/
+const LIST_ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/
+function tableCells(line) { return line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()) }
 function renderMarkdown(value) {
-  return value.trim().split(/\n{2,}/).map((block) => {
-    if (/^[-*] /m.test(block)) return `<ul>${block.split("\n").filter(Boolean).map((line) => `<li>${inlineMarkdown(line.replace(/^[-*] /, ""))}</li>`).join("")}</ul>`
-    return `<p>${inlineMarkdown(block).replace(/\n/g, "<br>")}</p>`
-  }).join("")
+  const lines = value.replace(/\r/g, "").split("\n")
+  const out = []
+  const startsBlock = (line, next) => /^\s*(```|#{1,6}\s|>)/.test(line) || LIST_ITEM.test(line) || /^\s*([-*_])(\s*\1){2,}\s*$/.test(line) || (line.includes("|") && next !== undefined && TABLE_SEPARATOR.test(next))
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i]
+    if (!line.trim()) { i++; continue }
+    if (/^\s*```/.test(line)) {
+      const code = []
+      for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) code.push(lines[i])
+      i++
+      out.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`)
+    } else if (/^#{1,6}\s/.test(line)) {
+      const level = line.match(/^#+/)[0].length
+      out.push(`<h${level}>${inlineMarkdown(line.replace(/^#+\s+/, "").replace(/\s+#+\s*$/, ""))}</h${level}>`)
+      i++
+    } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      out.push("<hr>"); i++
+    } else if (line.includes("|") && i + 1 < lines.length && TABLE_SEPARATOR.test(lines[i + 1])) {
+      const head = tableCells(line)
+      const rows = []
+      for (i += 2; i < lines.length && lines[i].includes("|") && lines[i].trim(); i++) rows.push(tableCells(lines[i]))
+      out.push(`<div class="table-wrap"><table><thead><tr>${head.map((cell) => `<th>${inlineMarkdown(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${head.map((_, col) => `<td>${inlineMarkdown(row[col] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`)
+    } else if (/^\s*>/.test(line)) {
+      const quote = []
+      for (; i < lines.length && /^\s*>/.test(lines[i]); i++) quote.push(lines[i].replace(/^\s*>\s?/, ""))
+      out.push(`<blockquote>${renderMarkdown(quote.join("\n"))}</blockquote>`)
+    } else if (LIST_ITEM.test(line)) {
+      const items = []
+      for (; i < lines.length && lines[i].trim() && LIST_ITEM.test(lines[i]); i++) {
+        const [, indent, marker, text] = lines[i].match(LIST_ITEM)
+        items.push({ indent: indent.replace(/\t/g, "    ").length, ordered: /\d/.test(marker), text })
+      }
+      out.push(renderList(items))
+    } else {
+      const paragraph = []
+      for (; i < lines.length && lines[i].trim() && (paragraph.length === 0 || !startsBlock(lines[i], lines[i + 1])); i++) paragraph.push(lines[i].trim())
+      out.push(`<p>${paragraph.map(inlineMarkdown).join("<br>")}</p>`)
+    }
+  }
+  return out.join("")
 }
 function addTrace(title, detail = "", kind = "success") {
   if (trace.querySelector(".empty")) trace.innerHTML = ""

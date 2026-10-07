@@ -23,3 +23,17 @@
 @media (max-width:900px) { .layout{grid-template-columns:1fr}
 .sessions-panel{position:static;height:auto;max-height:260px;padding:20px 14px 0}
 }
+.result h1,.result h2,.result h3,.result h4,.result h5,.result h6 { margin:18px 0 8px; letter-spacing:-.02em; line-height:1.35; }
+.result h1 { font-size:20px } .result h2 { font-size:17px } .result h3 { font-size:15px } .result h4,.result h5,.result h6 { font-size:14px }
+.result > :first-child { margin-top:0 }
+.result ul,.result ol { padding-left:22px; margin:8px 0; }
+.result li { margin:3px 0 }
+.result a { color:var(--blue) }
+.result hr { border:0; border-top:1px solid var(--line); margin:16px 0; }
+.result blockquote { margin:10px 0; padding:2px 14px; border-left:3px solid #cfdcf0; color:#4d5b6a; background:#f7f9fc; border-radius:0 8px 8px 0; }
+.result pre { margin:10px 0; padding:12px 14px; overflow:auto; background:#f1f4f7; border-radius:9px; font:12px/1.55 'DM Mono',monospace; }
+.result pre code { padding:0; background:none; }
+.table-wrap { overflow-x:auto; margin:10px 0; }
+.result table { border-collapse:collapse; width:100%; font-size:13px; line-height:1.55; }
+.result th,.result td { border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top; }
+.result th { background:#f3f6fa; font-weight:700; }
