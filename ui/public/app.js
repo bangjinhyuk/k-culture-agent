@@ -144,17 +144,33 @@ function resetPanels() {
   runState.textContent = "대기 중"; runState.className = "run-state"
   turnTabs.hidden = true; turnTabs.innerHTML = ""
 }
+function priorReadCount() {
+  if (!current) return 0
+  const files = new Set()
+  current.turns.slice(0, active).forEach((turn) => {
+    turn.events.forEach((event) => {
+      const path = event.type === "tool_use" && event.part?.tool === "culture_read"
+        ? event.part.state?.input?.path : null
+      if (path) files.add(path)
+    })
+  })
+  return files.size
+}
 function renderTurn(turn) {
   trace.innerHTML = ""
   addTrace("목표 수신", turn.prompt, turn.finished ? "success" : "running")
-  const files = new Set()
+  const files = new Map()
   let answer = ""
   let score = null
   for (const event of turn.events) {
     if (event.type === "tool_use" && event.part) {
       const [title, detail] = describeTool(event.part)
       addTrace(title, detail)
-      if (event.part.tool === "culture_read" && event.part.state?.input?.path) files.add(event.part.state.input.path)
+      if (event.part.tool === "culture_read" && event.part.state?.input?.path) {
+        const path = event.part.state.input.path
+        const output = event.part.state?.output
+        files.set(path, Boolean(files.get(path)) || (typeof output === "string" && output.includes("[UNTRUSTED_REFERENCE_DETECTED]")))
+      }
       score = readScore(event.part) || score
     } else if (event.type === "text" && event.part?.text) {
       answer = event.part.text
@@ -168,8 +184,19 @@ function renderTurn(turn) {
     result.className = "result empty"
     result.textContent = turn.finished ? (turn.error || "Agent 실행이 완료되지 않았습니다.") : "Agent가 조사 중입니다…"
   }
-  if (files.size) { evidence.className = "evidence"; evidence.innerHTML = [...files].map((file) => `<div class="evidence-item"><span>✓</span><code>${escapeHtml(file)}</code></div>`).join("") }
-  else { evidence.className = "evidence empty"; evidence.textContent = "아직 읽은 파일이 없습니다." }
+  if (files.size) {
+    evidence.className = "evidence"
+    evidence.innerHTML = [...files].map(([file, injection]) => {
+      return `<div class="evidence-item${injection ? " injection-evidence" : ""}"><span>${injection ? "⚠" : "✓"}</span><code>${escapeHtml(file)}</code>${injection ? '<b>Prompt Injection 감지</b>' : ""}</div>`
+    }).join("")
+  }
+  else {
+    const previous = priorReadCount()
+    evidence.className = "evidence empty"
+    evidence.textContent = previous
+      ? `이번 실행에서는 파일을 새로 읽지 않았습니다. 이전 실행에서 읽은 ${previous}개 파일은 상단 실행 탭에서 확인할 수 있습니다.`
+      : "이번 실행에서 읽은 파일이 없습니다."
+  }
   renderScore(score)
   runState.textContent = !turn.finished ? "● Agent 실행 중" : turn.error ? "중단됨" : "완료"
   runState.className = `run-state ${!turn.finished ? "running" : turn.error ? "" : "done"}`
@@ -319,7 +346,14 @@ sessionList.addEventListener("keydown", (event) => {
   const item = event.target.closest("[data-session]")
   if (item && event.target === item && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openSession(item.dataset.session) }
 })
-document.querySelectorAll("[data-demo]").forEach((button) => button.addEventListener("click", () => { switchMainTab("demo"); goal.value = button.dataset.demo; startRun() }))
+document.querySelectorAll("[data-demo]").forEach((button) => button.addEventListener("click", () => {
+  if (current?.turns.some((turn) => !turn.finished)) return
+  // 각 데모는 이전 대화의 기억을 재사용하지 않는다. 화면의 근거 목록이 이 실행의 실제 읽기 결과만 보여주도록 한다.
+  newSession()
+  switchMainTab("demo")
+  goal.value = button.dataset.demo
+  startRun()
+}))
 $("#attempt-network")?.addEventListener("click", () => runSecurityAttempt("network"))
 $("#attempt-secret")?.addEventListener("click", () => runSecurityAttempt("secret"))
 async function loadModels() {

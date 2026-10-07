@@ -127,7 +127,7 @@ permission:
 
 #### Evidence Scoring
 
-`culture_evidence_score`는 `authority + freshness + specificity + relevance`를 합산해 자료를 정렬합니다. Agent는 운영시간처럼 출처가 충돌하거나 최신성·공식성이 중요한 사실을 답할 때 이 도구를 호출합니다.
+`culture_evidence_score`는 `출처 신뢰도 + 최신성 + 구체성 + 관련성`을 합산해 자료를 정렬합니다. Agent는 운영시간처럼 출처가 충돌하거나 최신성·공식성이 중요한 사실을 답할 때 이 도구를 호출합니다.
 
 ```json
 {
