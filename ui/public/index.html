@@ -7,6 +7,11 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <div class="layout">
+    <aside class="sessions-panel" aria-label="대화 목록">
+      <div class="sessions-head"><h2>대화</h2><button id="new-session" type="button">+ 새 대화</button></div>
+      <div id="session-list" class="session-list"><div class="empty">아직 대화가 없습니다.</div></div>
+    </aside>
     <main class="app-shell">
       <header class="hero">
         <div>
@@ -37,6 +42,7 @@
         </article>
         <article class="card result-card">
           <div class="panel-heading"><div><p class="section-kicker">ANSWER</p><h2>Result</h2></div></div>
+          <div id="turn-tabs" class="turn-tabs" hidden></div>
           <div id="result" class="result empty">The agent’s final answer will appear here.</div>
           <section class="evidence-section">
             <h3>Evidence read in this run</h3>
@@ -51,6 +57,7 @@
         <p class="security-note">Policy is queried from the running <code>k-culture-agent</code> sandbox; it is not a hard-coded status badge.</p>
       </section>
     </main>
+    </div>
     <script src="/app.js"></script>
   </body>
 </html>
