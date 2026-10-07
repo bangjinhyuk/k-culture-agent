@@ -15,6 +15,7 @@ import re
 import subprocess
 import threading
 import time
+import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from http import HTTPStatus
@@ -35,8 +36,16 @@ ACTIVE_RUN_ID: str | None = None
 # A turn is one prompt/answer exchange; `--session` makes OpenCode keep the context between turns.
 SESSIONS: dict[str, dict[str, Any]] = {}
 SESSIONS_LOCK = threading.RLock()
+# Models the UI may select. `id` is OpenCode's provider/model (providers in app/opencode.json);
+# `port` is the vLLM server on the host, probed only to show availability. The first entry is the default.
+MODELS = [
+    {"id": "local-nvidia/nvidia/nemotron-3-super", "label": "Nemotron 3 Super 120B (FP8)", "port": 8000},
+    {"id": "local-qwen/qwen/qwen3-next-80b", "label": "Qwen3-Next 80B (FP8)", "port": 8001},
+]
+MODEL_IDS = {model["id"] for model in MODELS}
+DEFAULT_MODEL = MODELS[0]["id"]
 STORED_EVENT_TYPES = {"tool_use", "text", "error"}
-MAX_STORED_OUTPUT = 500
+MAX_STORED_OUTPUT = 4_000
 
 
 def now_ms() -> int:
@@ -69,6 +78,17 @@ def compact_event(event: dict[str, Any]) -> dict[str, Any]:
     if isinstance(state, dict) and isinstance(state.get("output"), str):
         event = {**event, "part": {**event["part"], "state": {**state, "output": state["output"][:MAX_STORED_OUTPUT]}}}
     return event
+
+
+def models_data() -> list[dict[str, Any]]:
+    def up(port: int) -> bool:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/models", timeout=1.5):
+                return True
+        except (OSError, ValueError):
+            return False
+
+    return [{"id": m["id"], "label": m["label"], "available": up(m["port"])} for m in MODELS]
 
 
 def session_summary(session: dict[str, Any]) -> dict[str, Any]:
@@ -121,10 +141,10 @@ def command(command: str, args: list[str], timeout: int = 15) -> tuple[bool, str
         return False, "", str(error)
 
 
-def start_run(prompt: str, session: dict[str, Any]) -> Run:
+def start_run(prompt: str, session: dict[str, Any], model: str) -> Run:
     global ACTIVE_RUN_ID
     run = Run(id=str(uuid.uuid4()), prompt=prompt, session_id=session["id"])
-    turn = {"runId": run.id, "prompt": prompt, "at": now_ms(), "events": [], "finished": False, "error": None}
+    turn = {"runId": run.id, "prompt": prompt, "at": now_ms(), "model": model, "events": [], "finished": False, "error": None}
     with SESSIONS_LOCK:
         session["turns"].append(turn)
         session["updatedAt"] = turn["at"]
@@ -143,7 +163,7 @@ def start_run(prompt: str, session: dict[str, Any]) -> Run:
 
     def execute() -> None:
         # `prompt` remains one exact argv item. There is deliberately no shell.
-        argv = ["openshell", "sandbox", "exec", "-n", SANDBOX, "--", "opencode", "run", "--format", "json"]
+        argv = ["openshell", "sandbox", "exec", "-n", SANDBOX, "--", "opencode", "run", "--format", "json", "--model", model]
         if session.get("opencodeSessionId"):
             argv += ["--session", session["opencodeSessionId"]]
         argv += ["--dir", "/workspace/app", "--agent", "k-culture", prompt]
@@ -216,6 +236,27 @@ def security_data() -> dict[str, Any]:
     }
 
 
+def security_attempt(kind: str) -> dict[str, Any]:
+    """Run one fixed, non-sensitive policy demonstration inside OpenShell.
+
+    Neither the browser nor the Agent can select a command, path, or destination.
+    Command output is intentionally discarded so this endpoint can never reveal a
+    secret even if a policy is unexpectedly misconfigured.
+    """
+    if kind == "secret":
+        attempt = "/workspace/hackathon/secrets/service_key.env"
+        enforced_by = "OpenShell Filesystem Policy"
+        args = ["sandbox", "exec", "-n", SANDBOX, "--", "cat", attempt]
+    elif kind == "network":
+        attempt = "https://validation-kculture.example"
+        enforced_by = "OpenShell Network Policy"
+        args = ["sandbox", "exec", "-n", SANDBOX, "--", "curl", "-fsS", "--max-time", "5", attempt]
+    else:
+        raise ValueError("Unknown security demonstration")
+    allowed, _stdout, _stderr = command("openshell", args, timeout=12)
+    return {"attempt": attempt, "blocked": not allowed, "enforcedBy": enforced_by}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "TrustRouteKorea/1.0"
 
@@ -232,7 +273,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_POST(self) -> None:
-        if urlparse(self.path).path != "/api/run":
+        route = urlparse(self.path).path
+        if route in {"/api/security/attempt-secret", "/api/security/attempt-network"}:
+            kind = "secret" if route.endswith("secret") else "network"
+            try:
+                self.json_response(HTTPStatus.OK, security_attempt(kind))
+            except ValueError as error:
+                self.json_response(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if route != "/api/run":
             self.json_response(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
         try:
@@ -243,11 +292,15 @@ class Handler(BaseHTTPRequestHandler):
             prompt = body.get("prompt", "").strip() if isinstance(body, dict) else ""
             session_id = body.get("sessionId") if isinstance(body, dict) else None
             title = body.get("title") if isinstance(body, dict) else None
+            model = (body.get("model") if isinstance(body, dict) else None) or DEFAULT_MODEL
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
             self.json_response(HTTPStatus.BAD_REQUEST, {"error": "Invalid request body"})
             return
         if not isinstance(prompt, str) or not prompt or len(prompt) > 4000:
             self.json_response(HTTPStatus.BAD_REQUEST, {"error": "Enter a goal up to 4,000 characters."})
+            return
+        if model not in MODEL_IDS:
+            self.json_response(HTTPStatus.BAD_REQUEST, {"error": "Unknown model."})
             return
         with RUNS_LOCK:
             busy = ACTIVE_RUN_ID is not None
@@ -268,7 +321,7 @@ class Handler(BaseHTTPRequestHandler):
                     "opencodeSessionId": None, "createdAt": created, "updatedAt": created, "turns": [],
                 }
                 SESSIONS[session["id"]] = session
-        run = start_run(prompt, session)
+        run = start_run(prompt, session, model)
         self.json_response(HTTPStatus.ACCEPTED, {"runId": run.id, "sessionId": session["id"]})
 
     def do_DELETE(self) -> None:
@@ -296,6 +349,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if route == "/api/security":
             self.json_response(HTTPStatus.OK, security_data())
+            return
+        if route == "/api/models":
+            self.json_response(HTTPStatus.OK, {"models": models_data(), "default": DEFAULT_MODEL})
             return
         if route == "/api/sessions":
             with SESSIONS_LOCK:

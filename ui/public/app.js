@@ -1,6 +1,7 @@
 const $ = (selector) => document.querySelector(selector)
 const goal = $("#goal")
 const runButton = $("#run")
+const modelSelect = $("#model")
 const trace = $("#trace")
 const result = $("#result")
 const evidence = $("#evidence")
@@ -11,6 +12,11 @@ const policyState = $("#policy-state")
 const turnTabs = $("#turn-tabs")
 const sessionList = $("#session-list")
 const newSessionButton = $("#new-session")
+const scoreSection = $("#score-section")
+const scoreResult = $("#score-result")
+const securityVerification = $("#security-verification")
+const introPanel = $("#intro-panel")
+const demoPanel = $("#demo-panel")
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char])
@@ -99,11 +105,31 @@ function addTrace(title, detail = "", kind = "success") {
 }
 function describeTool(part) {
   const input = part.state?.input || {}
-  if (part.tool === "culture_list") return ["Dataset scanned", "culture_list()"]
-  if (part.tool === "culture_search") return ["Search", `culture_search(${JSON.stringify(input.query || "")})`]
-  if (part.tool === "culture_read") return ["Read", input.path || "Approved dataset file"]
-  if (part.tool === "culture_save") return ["Result saved", "Approved output directory"]
-  return [part.tool || "Tool used", ""]
+  if (part.tool === "culture_list") return ["데이터셋 목록 조회", "culture_list()"]
+  if (part.tool === "culture_search") return ["자료 검색", `culture_search(${JSON.stringify(input.query || "")})`]
+  if (part.tool === "culture_read") return ["근거 파일 읽기", input.path || "허용된 데이터셋 파일"]
+  if (part.tool === "culture_save") return ["결과 저장", "허용된 output 경로"]
+  if (part.tool === "culture_museum_hours") return ["공식 박물관 정보 조회", input.name || "문화시설 API"]
+  if (part.tool === "culture_evidence_score") return ["Evidence Scoring", "authority · freshness · specificity · relevance"]
+  return [part.tool || "도구 사용", ""]
+}
+
+function readScore(part) {
+  if (part.tool !== "culture_evidence_score") return null
+  const output = part.state?.output
+  if (typeof output !== "string") return null
+  try { return JSON.parse(output) } catch { return null }
+}
+function scoreSource(source) {
+  if (!source) return ""
+  const meta = [source.authority, source.freshness, source.score !== undefined ? `${source.score}/100` : ""].filter(Boolean).join(" · ")
+  return `<b>${escapeHtml(source.value || source.path || "선택 자료")}</b><span>${escapeHtml(source.path || "")}</span><small>${escapeHtml(meta)}${source.date ? ` · ${escapeHtml(source.date)}` : ""}</small>`
+}
+function renderScore(score) {
+  if (!score) { scoreSection.hidden = true; scoreResult.innerHTML = ""; return }
+  scoreSection.hidden = false
+  const excluded = Array.isArray(score.excluded) ? score.excluded : []
+  scoreResult.innerHTML = `<div class="score-live"><div class="selected-live"><span>선택 · ${escapeHtml(score.confidence || "unrated")} confidence</span>${scoreSource(score.selected)}<small>${escapeHtml(score.reason || "")}</small></div><div class="excluded-live"><span>${score.conflict ? "충돌 발견 · 배제" : "비교한 자료"}</span>${excluded.length ? excluded.map(scoreSource).join("") : "<small>배제된 자료 없음</small>"}</div></div>`
 }
 
 // Conversation state: one session holds several turns (prompt + OpenCode events). The panels show the active turn.
@@ -112,37 +138,41 @@ let active = 0
 let stream = null
 
 function resetPanels() {
-  trace.innerHTML = '<div class="empty">Enter a goal to see OpenCode’s observable tool events.</div>'
-  result.className = "result empty"; result.textContent = "The agent’s final answer will appear here."
-  evidence.className = "evidence empty"; evidence.textContent = "No source files read yet."
-  runState.textContent = "Waiting"; runState.className = "run-state"
+  trace.innerHTML = '<div class="empty">목표를 입력하면 OpenCode의 도구 실행 과정이 표시됩니다.</div>'
+  result.className = "result empty"; result.textContent = "Agent의 최종 답변이 이곳에 표시됩니다."
+  evidence.className = "evidence empty"; evidence.textContent = "아직 읽은 파일이 없습니다."
+  renderScore(null)
+  runState.textContent = "대기 중"; runState.className = "run-state"
   turnTabs.hidden = true; turnTabs.innerHTML = ""
 }
 function renderTurn(turn) {
   trace.innerHTML = ""
-  addTrace("Goal received", turn.prompt, turn.finished ? "success" : "running")
+  addTrace("목표 수신", turn.prompt, turn.finished ? "success" : "running")
   const files = new Set()
   let answer = ""
+  let score = null
   for (const event of turn.events) {
     if (event.type === "tool_use" && event.part) {
       const [title, detail] = describeTool(event.part)
       addTrace(title, detail)
       if (event.part.tool === "culture_read" && event.part.state?.input?.path) files.add(event.part.state.input.path)
+      score = readScore(event.part) || score
     } else if (event.type === "text" && event.part?.text) {
       answer = event.part.text
     }
   }
-  if (files.size >= 2) addTrace("Multiple sources reviewed", `${files.size} files read`, "success")
-  if (answer) addTrace("Final answer generated")
-  if (turn.finished) turn.error ? addTrace("Agent run stopped", turn.error, "warning") : addTrace("Completed")
+  if (files.size >= 2) addTrace("복수 출처 검토", `${files.size}개 파일 읽음`, "success")
+  if (answer) addTrace("최종 답변 생성")
+  if (turn.finished) turn.error ? addTrace("Agent 실행 중단", turn.error, "warning") : addTrace("완료")
   if (answer) { result.className = "result"; result.innerHTML = renderMarkdown(answer) }
   else {
     result.className = "result empty"
-    result.textContent = turn.finished ? (turn.error || "Agent run did not complete.") : "The agent is working…"
+    result.textContent = turn.finished ? (turn.error || "Agent 실행이 완료되지 않았습니다.") : "Agent가 조사 중입니다…"
   }
   if (files.size) { evidence.className = "evidence"; evidence.innerHTML = [...files].map((file) => `<div class="evidence-item"><span>✓</span><code>${escapeHtml(file)}</code></div>`).join("") }
-  else { evidence.className = "evidence empty"; evidence.textContent = "No source files read yet." }
-  runState.textContent = !turn.finished ? "● Agent running" : turn.error ? "Stopped" : "Completed"
+  else { evidence.className = "evidence empty"; evidence.textContent = "아직 읽은 파일이 없습니다." }
+  renderScore(score)
+  runState.textContent = !turn.finished ? "● Agent 실행 중" : turn.error ? "중단됨" : "완료"
   runState.className = `run-state ${!turn.finished ? "running" : turn.error ? "" : "done"}`
 }
 function render() {
@@ -172,17 +202,17 @@ async function startRun() {
   if (!prompt) { goal.focus(); return }
   runButton.disabled = true
   try {
-    const response = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, sessionId: current?.id }) })
+    const response = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, sessionId: current?.id, model: modelSelect.value }) })
     const body = await response.json()
     if (!response.ok) throw new Error(body.error || "Could not start the agent")
     if (!current || current.id !== body.sessionId) current = { id: body.sessionId, turns: [] }
-    const turn = { runId: body.runId, prompt, events: [], finished: false, error: null }
+    const turn = { runId: body.runId, prompt, model: modelSelect.value, events: [], finished: false, error: null }
     current.turns.push(turn); active = current.turns.length - 1
     goal.value = ""
     render(); attachStream(current, turn); loadSessions()
   } catch (error) {
     runButton.disabled = false
-    trace.innerHTML = ""; addTrace("Could not start Agent", error.message, "warning")
+    trace.innerHTML = ""; addTrace("Agent를 시작할 수 없음", error.message, "warning")
     result.className = "result empty"; result.textContent = error.message
   }
 }
@@ -200,6 +230,27 @@ function newSession() {
   stream?.close(); stream = null
   current = null; active = 0
   render(); renderSessionList(); runButton.disabled = false; goal.focus()
+}
+function switchMainTab(name) {
+  const isIntro = name === "intro"
+  introPanel.hidden = !isIntro
+  demoPanel.hidden = isIntro
+  document.querySelectorAll("[data-main-tab]").forEach((button) => button.classList.toggle("active", button.dataset.mainTab === name))
+}
+async function runSecurityAttempt(kind) {
+  const labels = kind === "secret"
+    ? { attempt: "/workspace/hackathon/secrets/service_key.env", policy: "OpenShell Filesystem Policy" }
+    : { attempt: "https://validation-kculture.example", policy: "OpenShell Network Policy" }
+  securityVerification.hidden = false
+  securityVerification.innerHTML = `<div class="verification-title">SECURITY VERIFICATION</div><div class="verification-grid"><div><span>Attempt</span><code>${escapeHtml(labels.attempt)}</code></div><div><span>Result</span><b>검증 중…</b></div><div><span>Enforced by</span><b>${labels.policy}</b></div></div>`
+  try {
+    const response = await fetch(`/api/security/attempt-${kind}`, { method: "POST" })
+    const body = await response.json()
+    const result = body.blocked ? "🚫 ACCESS DENIED" : "⚠ 정책 확인 필요"
+    securityVerification.innerHTML = `<div class="verification-title">SECURITY VERIFICATION</div><div class="verification-grid"><div><span>Attempt</span><code>${escapeHtml(body.attempt || labels.attempt)}</code></div><div><span>Result</span><b class="${body.blocked ? "denied" : ""}">${result}</b></div><div><span>Enforced by</span><b>${escapeHtml(body.enforcedBy || labels.policy)}</b></div></div>`
+  } catch (error) {
+    securityVerification.innerHTML = `<div class="verification-title">SECURITY VERIFICATION</div><p class="empty">검증 요청 실패: ${escapeHtml(error.message)}</p>`
+  }
 }
 async function deleteSession(id) {
   const response = await fetch(`/api/sessions/${id}`, { method: "DELETE" })
@@ -224,36 +275,37 @@ async function loadSecurity() {
     const data = await (await fetch("/api/security")).json()
     if (!data.ok) throw new Error(data.error)
     const ro = data.policy.filesystem.readOnly, rw = data.policy.filesystem.readWrite
-    const endpoints = data.policy.network.endpoints.map((endpoint) => `${endpoint.host}:${endpoint.port}`).join(", ") || "No approved endpoint"
+    const endpoints = data.policy.network.endpoints.map((endpoint) => `${endpoint.host}:${endpoint.port}`).join(", ") || "허용 endpoint 없음"
     security.innerHTML = securityRow("Filesystem", [
-      ["input", policyPath(ro, "/workspace/hackathon/input") ? "READ ONLY" : "NOT GRANTED"],
-      ["output", policyPath(rw, "/workspace/hackathon/output") ? "READ / WRITE" : "NOT GRANTED"],
-      ["restricted", data.policy.filesystem.restrictedByAllowlist ? "BLOCKED" : "CHECK POLICY"],
-      ["secrets", data.policy.filesystem.restrictedByAllowlist ? "BLOCKED" : "CHECK POLICY"],
+      ["input", policyPath(ro, "/workspace/hackathon/input") ? "읽기 전용" : "권한 없음"],
+      ["output", policyPath(rw, "/workspace/hackathon/output") ? "읽기 · 쓰기" : "권한 없음"],
+      ["restricted", data.policy.filesystem.restrictedByAllowlist ? "차단됨" : "정책 확인 필요"],
+      ["secrets", data.policy.filesystem.restrictedByAllowlist ? "차단됨" : "정책 확인 필요"],
     ]) + securityRow("Network", [
-      ["approved endpoints", endpoints],
-      ["external access", "RESTRICTED TO POLICY"],
+      ["허용 endpoint", endpoints],
+      ["외부 접근", "정책 범위로 제한"],
     ], "blue") + securityRow("Agent guardrails", [
-      ["tool permission", data.agent.customToolsOnly ? "culture_* ONLY" : "CHECK CONFIG"],
-      ["injection guard", data.agent.guardrails ? "ENABLED" : "CHECK CONFIG"],
+      ["도구 권한", data.agent.customToolsOnly ? "culture_* 전용" : "설정 확인 필요"],
+      ["Injection 방어", data.agent.guardrails ? "활성화" : "설정 확인 필요"],
     ])
-    policyState.textContent = "● Policy effective"; policyState.className = "policy-state good"
+    policyState.textContent = "● Policy 적용됨"; policyState.className = "policy-state good"
   } catch (error) {
-    security.innerHTML = `<div class="empty">Security policy could not be read: ${escapeHtml(error.message)}</div>`
-    policyState.textContent = "Policy unavailable"; policyState.className = "policy-state bad"
+    security.innerHTML = `<div class="empty">Security policy를 읽을 수 없습니다: ${escapeHtml(error.message)}</div>`
+    policyState.textContent = "정책 조회 불가"; policyState.className = "policy-state bad"
   }
 }
 async function loadHealth() {
   try {
     const response = await fetch("/api/health")
     if (!response.ok) throw new Error()
-    healthBadge.className = "status-badge online"; healthBadge.innerHTML = "<span></span>OpenShell Secured"
+    healthBadge.className = "status-badge online"; healthBadge.innerHTML = "<span></span>OpenShell 보호 중"
   } catch {
-    healthBadge.className = "status-badge offline"; healthBadge.innerHTML = "<span></span>Agent Offline"
+    healthBadge.className = "status-badge offline"; healthBadge.innerHTML = "<span></span>Agent 오프라인"
   }
 }
 runButton.addEventListener("click", startRun)
 newSessionButton.addEventListener("click", newSession)
+document.querySelectorAll("[data-main-tab]").forEach((button) => button.addEventListener("click", () => switchMainTab(button.dataset.mainTab)))
 turnTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-turn]")
   if (tab && current) { active = Number(tab.dataset.turn); render() }
@@ -268,5 +320,17 @@ sessionList.addEventListener("keydown", (event) => {
   const item = event.target.closest("[data-session]")
   if (item && event.target === item && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openSession(item.dataset.session) }
 })
-document.querySelectorAll("[data-demo]").forEach((button) => button.addEventListener("click", () => { goal.value = button.dataset.demo; goal.focus() }))
-loadHealth(); loadSecurity(); loadSessions()
+document.querySelectorAll("[data-demo]").forEach((button) => button.addEventListener("click", () => { switchMainTab("demo"); goal.value = button.dataset.demo; startRun() }))
+$("#attempt-network")?.addEventListener("click", () => runSecurityAttempt("network"))
+$("#attempt-secret")?.addEventListener("click", () => runSecurityAttempt("secret"))
+async function loadModels() {
+  try {
+    const { models, default: fallback } = await (await fetch("/api/models")).json()
+    const saved = (() => { try { return localStorage.getItem("model") } catch { return null } })()
+    modelSelect.innerHTML = models.map((m) => `<option value="${escapeHtml(m.id)}"${m.available ? "" : " disabled"}>${escapeHtml(m.label)}${m.available ? "" : " (꺼짐)"}</option>`).join("")
+    const usable = models.filter((m) => m.available).map((m) => m.id)
+    modelSelect.value = usable.includes(saved) ? saved : (usable.includes(fallback) ? fallback : usable[0] || fallback)
+  } catch { modelSelect.innerHTML = "" }
+}
+modelSelect.addEventListener("change", () => { try { localStorage.setItem("model", modelSelect.value) } catch {} })
+loadModels(); loadHealth(); loadSecurity(); loadSessions()
