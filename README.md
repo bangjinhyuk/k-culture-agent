@@ -1,6 +1,6 @@
 # TrustRoute Korea
 
-TrustRoute Korea는 제공된 한국 문화·역사 자료를 탐색하고, 서로 다른 시점의 기록을 비교해 근거 있는 답변을 만드는 OpenCode 기반 AI Agent입니다. 단순 질의응답이 아니라 전용 도구로 자료를 검색·열람한 뒤, 읽은 근거와 실행 trace를 UI에서 함께 보여줍니다.
+TrustRoute Korea는 제공된 한국 문화·역사 자료를 탐색하고, 서로 다른 시점의 기록을 비교해 근거 있는 답변을 만드는 OpenCode 기반 AI Agent입니다. 단순 질의응답이 아니라 전용 도구로 자료를 검색·열람한 뒤, 읽은 근거와 실행 trace를 UI에서 함께 보여줍니다. 충돌한 기록은 Evidence Scoring으로 선택·배제 사유를 구조화합니다.
 
 핵심 원칙은 **Agent를 신뢰하지 않고, 필요한 권한만 이중으로 강제**하는 것입니다.
 
@@ -123,14 +123,20 @@ permission:
 | `culture_search` | 승인된 input 텍스트만 검색 | 관련 문서를 최소 범위로 찾기 |
 | `culture_read` | `hackathon/input/**`의 상대 경로 | 검색 결과의 실제 근거 확인 |
 | `culture_save` | `hackathon/output/final-answer.md` | 최종 결과만 지정된 위치에 저장 |
-| `culture_museum_hours` | 지역문화정보시스템 박물관 API(`apis.data.go.kr`, GET, 읽기 전용). 호스트·경로는 코드에 고정, 에이전트는 박물관 이름만 지정 | 박물관 개관 시간을 공식 출처로 확인 |
+| `culture_evidence_score` | 승인된 input 파일 2~10개 | 충돌 시 자료별 점수·선택·배제 사유를 JSON으로 생성 |
 
-#### 박물관 API (`culture_museum_hours`)
+#### Evidence Scoring
 
-- 서비스 키(공공데이터포털에서 발급)는 에이전트가 아니라 운영자가 샌드박스에 넣습니다. `CULTURE_API_KEY` 환경변수 또는 샌드박스의 `/tmp/culture-api-key` 파일을 읽습니다. 키가 없으면 도구가 "확인 불가"를 돌려주고 에이전트는 시간을 지어내지 않습니다.
-- 공개 문서에는 응답 필드가 명시돼 있지 않아, 도구는 필드명을 가정하지 않고 응답을 그대로 돌려줍니다. 개관 시간 필드가 없으면 "확인 불가"로 답하게 했습니다. 실제 키로 응답을 확인한 뒤 필드를 조정하세요.
-- 네트워크는 `openshell/policy.yaml`의 `culture_museum_api`(opencode 바이너리, `apis.data.go.kr:443`, GET, 해당 경로만)로 열었습니다.
-- 적용: 정책은 `openshell policy set k-culture-agent --policy openshell/policy.yaml --wait`, 도구와 에이전트 지침은 이미지 재빌드 또는 샌드박스 재생성이 필요합니다. 키는 `openshell sandbox upload`로 `/tmp/culture-api-key`에 올립니다.
+`culture_evidence_score`는 `authority + freshness + specificity + relevance`를 합산해 자료를 정렬합니다. Agent는 운영시간처럼 출처가 충돌하거나 최신성·공식성이 중요한 사실을 답할 때 이 도구를 호출합니다.
+
+```json
+{
+  "selected": "source-a",
+  "confidence": "high",
+  "reason": "공식 출처이며 요청일과 가까운 자료",
+  "conflict": true
+}
+```
 
 전용 도구 구현은 절대 경로·경로 탈출·심볼릭 링크를 차단하고, 1 MiB 초과 파일은 읽지 않습니다. 따라서 shell, web access, 임의 read/write 도구를 Agent에 주지 않습니다.
 
@@ -159,29 +165,12 @@ OpenCode provider는 [`app/opencode.json`](app/opencode.json)에서 다음 OpenA
 | HTTP | `POST /v1/chat/completions`만 허용 |
 | 실행 주체 | `/usr/local/bin/opencode`만 허용 |
 | 모델 | `nvidia/nemotron-3-super` |
+| 선택 가능 모델 | UI 드롭다운에서 `nvidia/nemotron-3-super`(포트 8000) 또는 `qwen/qwen3-next-80b`(포트 8001, `scripts/start_qwen.sh`)를 고릅니다. 목록은 `ui/server/index.py`의 `MODELS`, 제공자는 `app/opencode.json`, 네트워크 허용은 `openshell/policy.yaml`에 있습니다. |
 | 인증 | API key 미사용 (local endpoint) |
 
 일반 인터넷은 OpenShell policy에 의해 허용되지 않습니다. `curl` 같은 임의 프로세스도 Nemotron endpoint에 접근할 수 없습니다.
 
-### 지역문화정보시스템 박물관 API
-
-`culture_museum_hours`는 공식 개관 정보를 확인할 때만 사용하는 읽기 전용 도구입니다.
-
-| 항목 | 허용 범위 |
-|---|---|
-| 대상 | `apis.data.go.kr:443` (`culture.go.kr` 지역문화정보시스템) |
-| HTTP | `GET /B553457/rgnCltrFcltExmnv1/clifMsmv1`만 허용 |
-| 실행 주체 | `/usr/local/bin/opencode`만 허용 |
-| 입력 | Agent는 박물관 이름만 전달; host·path는 코드에 고정 |
-| 키 관리 | 운영자가 `CULTURE_API_KEY` 또는 `/tmp/culture-api-key`로 주입; Agent에는 노출하지 않음 |
-
-키·응답·시간 필드가 없거나 API 호출이 실패하면 도구는 시간을 추정하지 않고 **확인 불가**로 반환합니다. 이 규칙과 적용 방법은 위 `culture_museum_hours` 절에 설명되어 있습니다.
-
-### 현재 policy의 npm registry 규칙
-
-현재 [`openshell/policy.yaml`](openshell/policy.yaml)에는 테스트 과정에서 남은 `registry.npmjs.org:443` read-only 규칙이 있으며, 실행 주체는 `/usr/local/bin/opencode`로 제한됩니다. Docker build 단계에서 `@opencode-ai/plugin`을 이미지에 미리 설치하므로 runtime에는 이 통신이 필요하지 않습니다.
-
-따라서 **제출/운영 전에는 `npm_registry` 블록을 제거하고, Nemotron과 명시적으로 필요한 공식 박물관 API만 남기는 것을 권장**합니다. UI의 Security 패널은 이처럼 현재 실행 중인 effective policy의 endpoint를 그대로 표시합니다.
+일반 인터넷과 외부 API는 허용하지 않습니다. policy에 남아 있는 endpoint는 Brev host 안에서 실행 중인 추론 모델에 연결하기 위한 `host.openshell.internal:8000`과 `:8001`뿐이며, `/usr/local/bin/opencode`가 `POST /v1/chat/completions`으로 호출할 때만 허용됩니다. UI의 Security 패널은 실행 중인 effective policy의 endpoint를 그대로 표시합니다.
 
 ## 보안 흐름 요약
 

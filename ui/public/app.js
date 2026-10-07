@@ -109,7 +109,6 @@ function describeTool(part) {
   if (part.tool === "culture_search") return ["자료 검색", `culture_search(${JSON.stringify(input.query || "")})`]
   if (part.tool === "culture_read") return ["근거 파일 읽기", input.path || "허용된 데이터셋 파일"]
   if (part.tool === "culture_save") return ["결과 저장", "허용된 output 경로"]
-  if (part.tool === "culture_museum_hours") return ["공식 박물관 정보 조회", input.name || "문화시설 API"]
   if (part.tool === "culture_evidence_score") return ["Evidence Scoring", "authority · freshness · specificity · relevance"]
   return [part.tool || "도구 사용", ""]
 }
@@ -161,7 +160,7 @@ function renderTurn(turn) {
       answer = event.part.text
     }
   }
-  if (files.size >= 2) addTrace("복수 출처 검토", `${files.size}개 파일 읽음`, "success")
+  if (files.size >= 2) addTrace("복수 출처 읽음", `${files.size}개 파일 읽음`, "success")
   if (answer) addTrace("최종 답변 생성")
   if (turn.finished) turn.error ? addTrace("Agent 실행 중단", turn.error, "warning") : addTrace("완료")
   if (answer) { result.className = "result"; result.innerHTML = renderMarkdown(answer) }

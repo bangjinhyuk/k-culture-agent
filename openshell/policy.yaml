@@ -27,32 +27,6 @@ landlock:
   compatibility: best_effort
 
 network_policies:
-  npm_registry:
-    name: npm-registry
-    endpoints:
-      - host: registry.npmjs.org
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        access: read-only
-        allow_encoded_slash: true
-    binaries:
-      - path: /usr/local/bin/opencode
-
-  culture_museum_api:
-    name: Culture.go.kr museum API (read-only)
-    endpoints:
-      - host: apis.data.go.kr
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        rules:
-          - allow:
-              method: GET
-              path: /B553457/rgnCltrFcltExmnv1/clifMsmv1
-    binaries:
-      - path: /usr/local/bin/opencode
-
   local_llm:
     name: Local NVIDIA LLM
 
