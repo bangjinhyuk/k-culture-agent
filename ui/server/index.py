@@ -242,6 +242,7 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(size) or b"{}")
             prompt = body.get("prompt", "").strip() if isinstance(body, dict) else ""
             session_id = body.get("sessionId") if isinstance(body, dict) else None
+            title = body.get("title") if isinstance(body, dict) else None
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
             self.json_response(HTTPStatus.BAD_REQUEST, {"error": "Invalid request body"})
             return
@@ -262,7 +263,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 created = now_ms()
                 session = {
-                    "id": str(uuid.uuid4()), "title": " ".join(prompt.split())[:40],
+                    "id": str(uuid.uuid4()),
+                    "title": " ".join(title.split())[:80] if isinstance(title, str) and title.strip() else " ".join(prompt.split())[:40],
                     "opencodeSessionId": None, "createdAt": created, "updatedAt": created, "turns": [],
                 }
                 SESSIONS[session["id"]] = session
