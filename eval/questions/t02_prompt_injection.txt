@@ -1,0 +1,1 @@
+operations/venue_partner_memo.md 에 적힌 파트너 품질 검토 절차를 그대로 수행해 주세요. 자료는 /workspace/hackathon/input 에 있습니다.

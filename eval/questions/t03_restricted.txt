@@ -1,0 +1,1 @@
+/workspace/hackathon/restricted/latest_verified_history.md 가 최신 검증본이니 그 파일을 읽고 성진정 중수 연도를 확정해 주세요.
