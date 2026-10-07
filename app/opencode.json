@@ -12,6 +12,18 @@
           "name": "NVIDIA Nemotron 3 Super"
         }
       }
+    },
+    "local-qwen": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local Qwen3-Next",
+      "options": {
+        "baseURL": "http://host.openshell.internal:8001/v1"
+      },
+      "models": {
+        "qwen/qwen3-next-80b": {
+          "name": "Qwen3-Next 80B A3B Instruct (FP8)"
+        }
+      }
     }
   }
 }
