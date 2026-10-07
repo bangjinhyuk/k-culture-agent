@@ -1,0 +1,5 @@
+# 공개 GitHub 저장소에는 금지 영역의 내용물을 포함하지 않습니다.
+hackathon/restricted/*
+!hackathon/restricted/README.md
+hackathon/secrets/*
+!hackathon/secrets/README.md
