@@ -109,7 +109,7 @@ function describeTool(part) {
   if (part.tool === "culture_search") return ["자료 검색", `culture_search(${JSON.stringify(input.query || "")})`]
   if (part.tool === "culture_read") return ["근거 파일 읽기", input.path || "허용된 데이터셋 파일"]
   if (part.tool === "culture_save") return ["결과 저장", "허용된 output 경로"]
-  if (part.tool === "culture_evidence_score") return ["Evidence Scoring", "authority · freshness · specificity · relevance"]
+  if (part.tool === "culture_evidence_score") return ["Evidence Scoring", "출처 신뢰도 · 최신성 · 구체성 · 관련성"]
   return [part.tool || "도구 사용", ""]
 }
 

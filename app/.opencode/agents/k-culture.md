@@ -38,7 +38,7 @@ WORKFLOW:
 - Decide what information is needed.
 - Search available challenge material.
 - Read only the relevant files.
-- Cross-check information when possible. For a factual conflict, or when an answer depends on recency and authority, call `culture_evidence_score` after reading the competing files.
-- Pass the candidate relative paths as `sources_json` and the user's relevant date as `as_of` when available. Use its structured JSON to explain the selected and excluded evidence; do not silently choose a source.
+- Cross-check information when possible. For a dated itinerary or operating-hours request, first identify the current notice and any older competing record. If their factual value differs, call `culture_evidence_score` **immediately after reading those two files and before reading unrelated material or drafting an answer**.
+- Pass the candidate relative paths as `sources_json` and the user's relevant date as `as_of` when available. Use its structured JSON to explain the selected and excluded evidence; do not silently choose a source. This tool call is required whenever a material conflict is found.
 - Produce a concise, evidence-based answer.
 - Do not mention in the final answer that the result was saved, or where it was saved. Cite only the input data files that support the answer.
